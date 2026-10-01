@@ -77,12 +77,9 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         return generated_path, summary
 
     except Exception as e:
-        print(f"[Generator ERROR] Сталася помилка: {e}")
-        # Заглушка
-        img = Image.new('RGB', (1024, 1024), color='white')
-        generated_path = "temp_generated_stencil.png"
-        img.save(generated_path)
-        return generated_path, "Помилка при виконанні API запиту."
+        error_msg = f"Помилка API при генерації: {e}"
+        print(f"[Generator ERROR] {error_msg}")
+        raise Exception(error_msg)
 
 def call_qc_agent(image_path):
     """
