@@ -36,10 +36,8 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         response = client.models.generate_content(
             model='gemini-2.5-pro',
             contents=[
-                types.Content(role="user", parts=[
-                    types.Part.from_text(gen_prompt_text),
-                    types.Part.from_uri(uploaded_ref.uri, mime_type="image/jpeg" if reference_image_path.lower().endswith(('jpg', 'jpeg')) else "image/png")
-                ])
+                gen_prompt_text,
+                uploaded_ref
             ],
             config=types.GenerateContentConfig(
                 system_instruction=GENERATOR_SYSTEM_PROMPT,
@@ -101,13 +99,8 @@ def call_qc_agent(image_path):
         response = client.models.generate_content(
             model='gemini-2.5-pro',
             contents=[
-                types.Content(
-                    role="user",
-                    parts=[
-                        types.Part.from_text("Проаналізуй цей трафарет. Відповідай строго за шаблоном."),
-                        types.Part.from_uri(uploaded_file.uri, mime_type="image/png")
-                    ]
-                )
+                "Проаналізуй цей трафарет. Відповідай строго за шаблоном.",
+                uploaded_file
             ],
             config=types.GenerateContentConfig(
                 system_instruction=QC_SYSTEM_PROMPT,
