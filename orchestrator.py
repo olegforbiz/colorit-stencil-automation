@@ -69,6 +69,9 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
             )
         ))
         
+        # Пауза між API викликами щоб не перевантажити сервер
+        time.sleep(5)
+        
         # Парсимо відповідь
         text_response = response.text
         # Спрощена логіка: якщо є IMAGE_PROMPT, витягуємо його
@@ -80,7 +83,7 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         
         # 2. Генерація зображення через Imagen 3
         print("[Generator Agent] Генерація PNG через Imagen 3...")
-        result = client.models.generate_images(
+        result = retry_api_call(lambda: client.models.generate_images(
             model='imagen-3.0-generate-002',
             prompt=image_prompt,
             config=types.GenerateImagesConfig(
@@ -88,7 +91,7 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
                 output_mime_type="image/png",
                 aspect_ratio="1:1"
             )
-        )
+        ))
         
         generated_path = f"generated_stencil_lvl_{complexity_level}.png"
         for generated_image in result.generated_images:
@@ -160,9 +163,15 @@ def run_stencil_automation(reference_image_path, complexity_level):
         )
         print(f"\n[Generator Agent] Резюме:\n{gen_summary}")
         
+        # Пауза перед QC аналізом
+        time.sleep(5)
+        
         # 2. Аналіз QC
         qc_response = call_qc_agent(gen_image_path)
         print(f"\n[QC Agent] Відповідь:\n{qc_response}")
+        
+        # Пауза після QC перед наступною ітерацією
+        time.sleep(5)
         
         # 3. Перевірка статусу
         if "STATUS: PASS" in qc_response:
@@ -190,7 +199,11 @@ def run_stencil_automation(reference_image_path, complexity_level):
                 
             if i == MAX_ITERATIONS:
                 print(f"\n[STOP] Досягнуто ліміт ітерацій ({MAX_ITERATIONS}). Пайплайн завершено без PASS.")
-                return gen_image_path # Повертаємо хоча б останній результат
+                return gen_image_path
+            
+            # Пауза між ітераціями для уникнення rate limiting
+            print(f"\n[PAUSE] Пауза 10 сек перед наступною ітерацією...")
+            time.sleep(10)
         else:
             print("\n[ERROR] Не вдалося розпізнати статус у відповіді QC. Зупинка.")
             return None
