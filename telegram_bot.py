@@ -46,16 +46,24 @@ def handle_level_selection(call):
                           chat_id=call.message.chat.id, 
                           message_id=call.message.message_id)
 
-@bot.message_handler(content_types=['photo'])
+@bot.message_handler(content_types=['photo', 'document'])
 def handle_photo(message):
     chat_id = message.chat.id
     level = user_levels.get(chat_id, "M")
     
-    msg = bot.reply_to(message, f"Отримав фото! Починаю конвеєр генерації (Складність: {level}). Це може зайняти хвилину-дві...")
+    msg = bot.reply_to(message, f"✅ Зображення прийнято! Починаю конвеєр генерації (Складність: {level}). Це може зайняти хвилину-дві, будь ласка, зачекайте...")
     
     try:
         # Завантажуємо фото з Telegram
-        file_info = bot.get_file(message.photo[-1].file_id)
+        if message.content_type == 'photo':
+            file_info = bot.get_file(message.photo[-1].file_id)
+        elif message.content_type == 'document':
+            if message.document.mime_type and message.document.mime_type.startswith('image/'):
+                file_info = bot.get_file(message.document.file_id)
+            else:
+                bot.reply_to(message, "❌ Будь ласка, надішліть саме зображення (JPG/PNG).")
+                return
+                
         downloaded_file = bot.download_file(file_info.file_path)
         
         input_image_path = f"input_{chat_id}.jpg"
