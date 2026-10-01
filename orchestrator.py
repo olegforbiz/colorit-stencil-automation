@@ -42,7 +42,15 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
     try:
         # 1. Аналіз референсу та підготовка промпту для Imagen
         print("[Generator Agent] Аналіз референсу...")
-        uploaded_ref = client.files.upload(file=reference_image_path)
+        with open(reference_image_path, 'rb') as f:
+            image_bytes = f.read()
+        
+        # Визначаємо MIME тип
+        mime_type = 'image/jpeg'
+        if reference_image_path.lower().endswith('.png'):
+            mime_type = 'image/png'
+        
+        image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
         
         gen_prompt_text = f"Складність: LEVEL {complexity_level}.\n"
         if patch_prompt:
@@ -53,7 +61,7 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
             model='gemini-3.8-flash',
             contents=[
                 gen_prompt_text,
-                uploaded_ref
+                image_part
             ],
             config=types.GenerateContentConfig(
                 system_instruction=GENERATOR_SYSTEM_PROMPT,
@@ -107,20 +115,24 @@ def call_qc_agent(image_path):
         return "STATUS: FAIL\nVIOLATIONS: F1: Плаваючі острови.\n<PATCH>Виправ острови в області ока.</PATCH>"
 
     try:
-        # Завантаження файлу в Gemini API
+        # Завантаження файлу як байтів
         print("[QC Agent] Завантаження зображення...")
-        uploaded_file = client.files.upload(file=image_path)
+        with open(image_path, 'rb') as f:
+            image_bytes = f.read()
+        
+        mime_type = 'image/png' if image_path.lower().endswith('.png') else 'image/jpeg'
+        image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
         
         print("[QC Agent] Очікування відповіді від моделі gemini-3.8-flash...")
         response = retry_api_call(lambda: client.models.generate_content(
             model='gemini-3.8-flash',
             contents=[
                 "Проаналізуй цей трафарет. Відповідай строго за шаблоном.",
-                uploaded_file
+                image_part
             ],
             config=types.GenerateContentConfig(
                 system_instruction=QC_SYSTEM_PROMPT,
-                temperature=0.1 # Низька температура для більш стабільного аналізу
+                temperature=0.1
             )
         ))
         return response.text
