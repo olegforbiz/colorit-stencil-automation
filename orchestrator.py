@@ -12,7 +12,7 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 def call_generator_agent(reference_image_path, complexity_level, patch_prompt=None):
     """
-    Виклик Агента-Генератора. Використовує gemini-2.5-pro для аналізу референсу та генерації 
+    Виклик Агента-Генератора. Використовує gemini-3.1-pro-preview для аналізу референсу та генерації 
     текстового промпту, і imagen-3.0-generate-002 для відмальовки трафарету.
     """
     print(f"\n[Generator Agent] Запуск генерації... (Складність: {complexity_level})")
@@ -34,7 +34,7 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         gen_prompt_text += "Згенеруй детальну текстову інструкцію англійською мовою (IMAGE_PROMPT) для Imagen 3, щоб намалювати цей трафарет (тільки чорні лінії на білому фоні, без заливок). Також напиши РЕЗЮМЕ за шаблоном."
         
         response = client.models.generate_content(
-            model='gemini-2.5-pro',
+            model='gemini-3.1-pro-preview',
             contents=[
                 gen_prompt_text,
                 uploaded_ref
@@ -95,9 +95,9 @@ def call_qc_agent(image_path):
         print("[QC Agent] Завантаження зображення...")
         uploaded_file = client.files.upload(file=image_path)
         
-        print("[QC Agent] Очікування відповіді від моделі gemini-2.5-pro...")
+        print("[QC Agent] Очікування відповіді від моделі gemini-3.1-pro-preview...")
         response = client.models.generate_content(
-            model='gemini-2.5-pro',
+            model='gemini-3.1-pro-preview',
             contents=[
                 "Проаналізуй цей трафарет. Відповідай строго за шаблоном.",
                 uploaded_file
