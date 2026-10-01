@@ -1,5 +1,6 @@
 import os
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from orchestrator import run_stencil_automation
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -12,25 +13,38 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # Зберігаємо вибраний рівень складності для кожного користувача
 user_levels = {}
 
+def get_level_keyboard():
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("🟢 Рівень S", callback_data="level_S"),
+        InlineKeyboardButton("🟡 Рівень M", callback_data="level_M"),
+        InlineKeyboardButton("🔴 Рівень H", callback_data="level_H")
+    )
+    return markup
+
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     bot.reply_to(message, 
         "Привіт! Я бот для створення трафаретів Colorit. 🎨\n\n"
         "1. Надішли мені зображення (як фото).\n"
         "2. За замовчуванням рівень складності M.\n"
-        "3. Щоб змінити рівень, напиши /level S, /level M або /level H.\n\n"
-        "Чекаю на твоє зображення!"
+        "3. Щоб змінити рівень, скористайся кнопками нижче!\n\n"
+        "Чекаю на твоє зображення!",
+        reply_markup=get_level_keyboard()
     )
 
 @bot.message_handler(commands=['level'])
 def set_level(message):
-    parts = message.text.split()
-    if len(parts) > 1 and parts[1].upper() in ['S', 'M', 'H']:
-        level = parts[1].upper()
-        user_levels[message.chat.id] = level
-        bot.reply_to(message, f"Рівень складності встановлено на {level}!")
-    else:
-        bot.reply_to(message, "Будь ласка, вкажіть рівень: /level S, /level M або /level H")
+    bot.reply_to(message, "Обери бажаний рівень складності:", reply_markup=get_level_keyboard())
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('level_'))
+def handle_level_selection(call):
+    level = call.data.split('_')[1]
+    user_levels[call.message.chat.id] = level
+    bot.answer_callback_query(call.id, f"Встановлено рівень {level}")
+    bot.edit_message_text(f"✅ Рівень складності успішно змінено на {level}!", 
+                          chat_id=call.message.chat.id, 
+                          message_id=call.message.message_id)
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
