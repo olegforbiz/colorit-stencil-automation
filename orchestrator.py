@@ -28,7 +28,7 @@ def retry_api_call(func, max_retries=3, delay=10):
 
 def call_generator_agent(reference_image_path, complexity_level, patch_prompt=None):
     """
-    Виклик Агента-Генератора. Використовує gemini-3.8-flash для аналізу референсу та генерації 
+    Виклик Агента-Генератора. Використовує gemini-2.5-flash для аналізу референсу та генерації 
     текстового промпту, і imagen-3.0-generate-002 для відмальовки трафарету.
     """
     print(f"\n[Generator Agent] Запуск генерації... (Складність: {complexity_level})")
@@ -58,7 +58,7 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         gen_prompt_text += "Згенеруй детальну текстову інструкцію англійською мовою (IMAGE_PROMPT) для Imagen 3, щоб намалювати цей трафарет (тільки чорні лінії на білому фоні, без заливок). Також напиши РЕЗЮМЕ за шаблоном."
         
         response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-3.8-flash',
+            model='gemini-2.5-flash',
             contents=[
                 gen_prompt_text,
                 image_part
@@ -123,9 +123,9 @@ def call_qc_agent(image_path):
         mime_type = 'image/png' if image_path.lower().endswith('.png') else 'image/jpeg'
         image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
         
-        print("[QC Agent] Очікування відповіді від моделі gemini-3.8-flash...")
+        print("[QC Agent] Очікування відповіді від моделі gemini-2.5-flash...")
         response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-3.8-flash',
+            model='gemini-2.5-flash',
             contents=[
                 "Проаналізуй цей трафарет. Відповідай строго за шаблоном.",
                 image_part
