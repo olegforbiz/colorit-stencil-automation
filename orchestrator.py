@@ -12,7 +12,7 @@ from prompts import GENERATOR_SYSTEM_PROMPT, QC_SYSTEM_PROMPT
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-def retry_api_call(func, max_retries=3, delay=10):
+def retry_api_call(func, max_retries=5, delay=20):
     """Повторює API виклик при 503/429 помилках."""
     for attempt in range(max_retries):
         try:
@@ -58,7 +58,7 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         gen_prompt_text += "Згенеруй детальну текстову інструкцію англійською мовою (IMAGE_PROMPT) для Imagen 3, щоб намалювати цей трафарет (тільки чорні лінії на білому фоні, без заливок). Також напиши РЕЗЮМЕ за шаблоном."
         
         response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-3.8-flash',
+            model='gemini-3.5-flash',
             contents=[
                 gen_prompt_text,
                 image_part
@@ -132,9 +132,9 @@ def call_qc_agent(image_path):
         mime_type = 'image/png' if image_path.lower().endswith('.png') else 'image/jpeg'
         image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
         
-        print("[QC Agent] Очікування відповіді від моделі gemini-3.8-flash...")
+        print("[QC Agent] Очікування відповіді від моделі gemini-3.5-flash...")
         response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-3.8-flash',
+            model='gemini-3.5-flash',
             contents=[
                 "Проаналізуй цей трафарет. Відповідай строго за шаблоном.",
                 image_part
