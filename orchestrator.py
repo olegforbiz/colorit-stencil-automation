@@ -82,13 +82,13 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         summary = summary_match.group(1).strip() if summary_match else text_response
         
         # 2. Генерація зображення через Gemini Image (офіційний спосіб з GitHub googleapis/python-genai)
-        print("[Generator Agent] Генерація PNG через gemini-3.1-flash-image...")
+        print("[Generator Agent] Генерація PNG через gemini-3-pro-image...")
         
         # Пауза перед генерацією зображення
         time.sleep(5)
         
         img_response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-3.1-flash-image',
+            model='gemini-3-pro-image',
             contents=image_prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE"],
