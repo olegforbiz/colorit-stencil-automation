@@ -81,22 +81,29 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         summary_match = re.search(r"(LEVEL:.*)", text_response, re.DOTALL)
         summary = summary_match.group(1).strip() if summary_match else text_response
         
-        # 2. Генерація зображення через Gemini Image (Nano Banana)
-        print("[Generator Agent] Генерація PNG через gemini-2.5-flash-image...")
-        result = retry_api_call(lambda: client.models.generate_images(
-            model='gemini-2.5-flash-image',
-            prompt=image_prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                output_mime_type="image/png",
-            )
+        # 2. Генерація зображення через Gemini Image (офіційний спосіб з GitHub googleapis/python-genai)
+        print("[Generator Agent] Генерація PNG через gemini-3.1-flash-image...")
+        
+        # Пауза перед генерацією зображення
+        time.sleep(5)
+        
+        img_response = retry_api_call(lambda: client.models.generate_content(
+            model='gemini-3.1-flash-image',
+            contents=image_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(
+                    aspect_ratio="1:1",
+                ),
+            ),
         ))
         
         generated_path = f"generated_stencil_lvl_{complexity_level}.png"
-        for generated_image in result.generated_images:
-            image = Image.open(io.BytesIO(generated_image.image.image_bytes))
-            image.save(generated_path)
-            break
+        for part in img_response.parts:
+            if part.inline_data:
+                generated_image = part.as_image()
+                generated_image.save(generated_path)
+                break
             
         return generated_path, summary
 
