@@ -50,7 +50,7 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         
         def make_call():
             return client.messages.create(
-                model="claude-3-5-sonnet-20240620",
+                model="claude-3-haiku-20240307",
                 max_tokens=1000,
                 system=GENERATOR_SYSTEM_PROMPT,
                 messages=[
@@ -121,7 +121,7 @@ def call_qc_agent(image_path):
         
         def make_qc_call():
             return client.messages.create(
-                model="claude-3-5-sonnet-20240620",
+                model="claude-3-haiku-20240307",
                 max_tokens=1000,
                 system=QC_SYSTEM_PROMPT,
                 messages=[
