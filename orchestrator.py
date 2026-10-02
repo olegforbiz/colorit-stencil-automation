@@ -2,79 +2,82 @@ import os
 import re
 import io
 import time
+import base64
 # pyrefly: ignore [missing-import]
 from PIL import Image
-from google import genai
-from google.genai import types
+import anthropic
 from prompts import GENERATOR_SYSTEM_PROMPT, QC_SYSTEM_PROMPT
 
 # Конфігурація API ключів
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
-def retry_api_call(func, max_retries=5, delay=20):
-    """Повторює API виклик при 503/429 помилках."""
+def retry_api_call(func, max_retries=3, delay=10):
+    """Повторює API виклик при помилках."""
     for attempt in range(max_retries):
         try:
             return func()
         except Exception as e:
             error_str = str(e)
-            if ('503' in error_str or '429' in error_str or 'UNAVAILABLE' in error_str) and attempt < max_retries - 1:
-                print(f"[RETRY] Спроба {attempt+1}/{max_retries} не вдалась (сервер перевантажений). Чекаю {delay} сек...")
+            if attempt < max_retries - 1:
+                print(f"[RETRY] Спроба {attempt+1}/{max_retries} не вдалась: {error_str}. Чекаю {delay} сек...")
                 time.sleep(delay)
             else:
                 raise
 
+def get_base64_encoded_image(image_path):
+    with open(image_path, "rb") as f:
+        return base64.b64encode(f.read()).decode('utf-8')
 
 def call_generator_agent(reference_image_path, complexity_level, patch_prompt=None):
-    """
-    Виклик Агента-Генератора. Використовує gemini-2.5-flash для аналізу референсу та генерації 
-    текстового промпту, і imagen-3.0-generate-002 для відмальовки трафарету.
-    """
     print(f"\n[Generator Agent] Запуск генерації... (Складність: {complexity_level})")
     if patch_prompt:
         print(f"[Generator Agent] Отримано правки від QC:\n{patch_prompt}")
         
     if not client:
-        print("[Generator ERROR] GEMINI_API_KEY не знайдено.")
+        print("[Generator ERROR] ANTHROPIC_API_KEY не знайдено.")
         return "temp_generated_stencil.png", "Помилка: API ключ відсутній"
 
     try:
-        # 1. Аналіз референсу та підготовка промпту для Imagen
-        print("[Generator Agent] Аналіз референсу...")
-        with open(reference_image_path, 'rb') as f:
-            image_bytes = f.read()
-        
-        # Визначаємо MIME тип
-        mime_type = 'image/jpeg'
-        if reference_image_path.lower().endswith('.png'):
-            mime_type = 'image/png'
-        
-        image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+        print("[Generator Agent] Аналіз референсу (Claude 3.5 Sonnet)...")
+        base64_data = get_base64_encoded_image(reference_image_path)
+        mime_type = 'image/png' if reference_image_path.lower().endswith('.png') else 'image/jpeg'
         
         gen_prompt_text = f"Складність: LEVEL {complexity_level}.\n"
         if patch_prompt:
             gen_prompt_text += f"УВАГА, ВИПРАВЛЕННЯ:\n{patch_prompt}\nВрахуй їх при генерації.\n"
-        gen_prompt_text += "Згенеруй детальну текстову інструкцію англійською мовою (IMAGE_PROMPT) для Imagen 3, щоб намалювати цей трафарет (тільки чорні лінії на білому фоні, без заливок). Також напиши РЕЗЮМЕ за шаблоном."
+        gen_prompt_text += "Згенеруй детальну текстову інструкцію англійською мовою (IMAGE_PROMPT) для Stable Diffusion, щоб намалювати цей трафарет (тільки чорні лінії на білому фоні, без заливок). Також напиши РЕЗЮМЕ за шаблоном."
         
-        response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-flash-latest',
-            contents=[
-                gen_prompt_text,
-                image_part
-            ],
-            config=types.GenerateContentConfig(
-                system_instruction=GENERATOR_SYSTEM_PROMPT,
-                temperature=0.2
+        def make_call():
+            return client.messages.create(
+                model="claude-3-5-sonnet-20240620",
+                max_tokens=1000,
+                system=GENERATOR_SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": mime_type,
+                                    "data": base64_data,
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": gen_prompt_text
+                            }
+                        ]
+                    }
+                ]
             )
-        ))
-        
-        # Пауза між API викликами щоб не перевантажити сервер
-        time.sleep(5)
+
+        response = retry_api_call(make_call)
+        text_response = response.content[0].text
         
         # Парсимо відповідь
-        text_response = response.text
-        # Спрощена логіка: якщо є IMAGE_PROMPT, витягуємо його
         image_prompt_match = re.search(r"IMAGE_PROMPT:\s*(.*?)(?:\nРЕЗЮМЕ|\Z)", text_response, re.DOTALL | re.IGNORECASE)
         image_prompt = image_prompt_match.group(1).strip() if image_prompt_match else f"A stencil coloring template of the subject, simple black outlines on pure white background, strictly no black fills, level {complexity_level} complexity, clean vector style lines."
         
@@ -86,19 +89,15 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         import urllib.request
         import urllib.parse
         
-        # Модифікуємо промпт, щоб точно отримати трафарет від відкритої моделі
         sd_prompt = f"pure white background, simple thin black line art, coloring book page, minimalist stencil, vector style, strict no shading, no gray, only black outlines. {image_prompt}"
         encoded_prompt = urllib.parse.quote(sd_prompt)
-        
-        # Додаємо seed для унікальності та nologo щоб прибрати водяний знак
         url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={int(time.time())}"
         
         generated_path = f"generated_stencil_lvl_{complexity_level}.png"
         
-        # Завантажуємо зображення
         req = urllib.request.Request(url, headers={'User-Agent': 'Colorit-Bot'})
-        with urllib.request.urlopen(req) as response, open(generated_path, 'wb') as out_file:
-            data = response.read()
+        with urllib.request.urlopen(req) as img_response, open(generated_path, 'wb') as out_file:
+            data = img_response.read()
             out_file.write(data)
             
         print("[Generator Agent] Зображення успішно згенеровано та збережено!")
@@ -110,40 +109,47 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         raise Exception(error_msg)
 
 def call_qc_agent(image_path):
-    """
-    Виклик Агента-Критика (Gemini Vision) для аналізу трафарету.
-    """
     print(f"\n[QC Agent] Аналіз згенерованого трафарету ({image_path})...")
     
     if not client:
-        print("[QC ERROR] GEMINI_API_KEY не знайдено в змінних середовища.")
-        print("[QC Agent] Повернення тестової відповіді для демонстрації.")
-        return "STATUS: FAIL\nVIOLATIONS: F1: Плаваючі острови.\n<PATCH>Виправ острови в області ока.</PATCH>"
+        print("[QC ERROR] ANTHROPIC_API_KEY не знайдено.")
+        return "STATUS: FAIL\n<PATCH>Помилка: API ключ відсутній</PATCH>"
 
     try:
-        # Завантаження файлу як байтів
-        print("[QC Agent] Завантаження зображення...")
-        with open(image_path, 'rb') as f:
-            image_bytes = f.read()
-        
+        base64_data = get_base64_encoded_image(image_path)
         mime_type = 'image/png' if image_path.lower().endswith('.png') else 'image/jpeg'
-        image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
         
-        print("[QC Agent] Очікування відповіді від моделі gemini-flash-latest...")
-        response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-flash-latest',
-            contents=[
-                "Проаналізуй цей трафарет. Відповідай строго за шаблоном.",
-                image_part
-            ],
-            config=types.GenerateContentConfig(
-                system_instruction=QC_SYSTEM_PROMPT,
-                temperature=0.1
+        def make_qc_call():
+            return client.messages.create(
+                model="claude-3-5-sonnet-20240620",
+                max_tokens=1000,
+                system=QC_SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": mime_type,
+                                    "data": base64_data,
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": "Проаналізуй цей трафарет. Відповідай строго за шаблоном."
+                            }
+                        ]
+                    }
+                ]
             )
-        ))
-        return response.text
+            
+        print("[QC Agent] Очікування відповіді від моделі Claude 3.5 Sonnet...")
+        response = retry_api_call(make_qc_call)
+        return response.content[0].text
     except Exception as e:
-        print(f"[QC ERROR] Сталася помилка при виклику Gemini API: {e}")
+        print(f"[QC ERROR] Сталася помилка при виклику Anthropic API: {e}")
         return "STATUS: FAIL\n<PATCH>Помилка API. Спробуйте ще раз.</PATCH>"
 
 def run_stencil_automation(reference_image_path, complexity_level):
