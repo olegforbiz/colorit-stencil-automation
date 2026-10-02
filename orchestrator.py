@@ -81,30 +81,27 @@ def call_generator_agent(reference_image_path, complexity_level, patch_prompt=No
         summary_match = re.search(r"(LEVEL:.*)", text_response, re.DOTALL)
         summary = summary_match.group(1).strip() if summary_match else text_response
         
-        # 2. Генерація зображення через Gemini Image (офіційний спосіб з GitHub googleapis/python-genai)
-        print("[Generator Agent] Генерація PNG через gemini-3-pro-image...")
+        # 2. Генерація зображення через відкрите безкоштовне API (Stable Diffusion)
+        print("[Generator Agent] Генерація PNG через Pollinations.ai (Stable Diffusion)...")
+        import urllib.request
+        import urllib.parse
         
-        # Пауза перед генерацією зображення
-        time.sleep(5)
+        # Модифікуємо промпт, щоб точно отримати трафарет від відкритої моделі
+        sd_prompt = f"pure white background, simple thin black line art, coloring book page, minimalist stencil, vector style, strict no shading, no gray, only black outlines. {image_prompt}"
+        encoded_prompt = urllib.parse.quote(sd_prompt)
         
-        img_response = retry_api_call(lambda: client.models.generate_content(
-            model='gemini-3-pro-image',
-            contents=image_prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE"],
-                image_config=types.ImageConfig(
-                    aspect_ratio="1:1",
-                ),
-            ),
-        ))
+        # Додаємо seed для унікальності та nologo щоб прибрати водяний знак
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={int(time.time())}"
         
         generated_path = f"generated_stencil_lvl_{complexity_level}.png"
-        for part in img_response.parts:
-            if part.inline_data:
-                generated_image = part.as_image()
-                generated_image.save(generated_path)
-                break
+        
+        # Завантажуємо зображення
+        req = urllib.request.Request(url, headers={'User-Agent': 'Colorit-Bot'})
+        with urllib.request.urlopen(req) as response, open(generated_path, 'wb') as out_file:
+            data = response.read()
+            out_file.write(data)
             
+        print("[Generator Agent] Зображення успішно згенеровано та збережено!")
         return generated_path, summary
 
     except Exception as e:
